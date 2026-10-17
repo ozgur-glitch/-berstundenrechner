@@ -21,9 +21,10 @@ export default function App() {
   const endTimeInputRef = useRef(null);
 
   const parseTimeToMinutes = (hhmm) => {
-    if (hhmm.length !== 4) return null;
-    const hours = parseInt(hhmm.substring(0, 2), 10);
-    const minutes = parseInt(hhmm.substring(2, 4), 10);
+    const cleaned = hhmm.replace(':', '');
+    if (cleaned.length !== 4) return null;
+    const hours = parseInt(cleaned.substring(0, 2), 10);
+    const minutes = parseInt(cleaned.substring(2, 4), 10);
     if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
     return hours * 60 + minutes;
   };
@@ -62,8 +63,6 @@ export default function App() {
     const calculatedFactorMinutes = intervalCount * 15 * multiplier;
 
     setResult({
-      startTime: startStr,
-      endTime: endStr,
       diffMinutes,
       aircraftType: type,
       multiplier,
@@ -74,7 +73,7 @@ export default function App() {
 
   const handleAircraftChange = (type) => {
     setAircraftType(type);
-    if (startTime.length === 4 && endTime.length === 4) {
+    if (startTime.replace(':', '').length === 4 && endTime.replace(':', '').length === 4) {
       calculateOvertimeWithParams(startTime, endTime, type);
     }
   };
@@ -82,14 +81,19 @@ export default function App() {
   const handleStartTimeChange = (text) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length <= 4) {
-      setStartTime(cleaned);
+      let formatted = cleaned;
+      if (cleaned.length > 2) {
+        formatted = `${cleaned.substring(0, 2)}:${cleaned.substring(2)}`;
+      }
+      setStartTime(formatted);
+
       if (cleaned.length === 4) {
         setTimeout(() => {
           endTimeInputRef.current?.focus();
         }, 50);
       }
-      if (cleaned.length === 4 && endTime.length === 4) {
-        calculateOvertimeWithParams(cleaned, endTime, aircraftType);
+      if (cleaned.length === 4 && endTime.replace(':', '').length === 4) {
+        calculateOvertimeWithParams(formatted, endTime, aircraftType);
       }
     }
   };
@@ -97,9 +101,14 @@ export default function App() {
   const handleEndTimeChange = (text) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length <= 4) {
-      setEndTime(cleaned);
-      if (cleaned.length === 4 && startTime.length === 4) {
-        calculateOvertimeWithParams(startTime, cleaned, aircraftType);
+      let formatted = cleaned;
+      if (cleaned.length > 2) {
+        formatted = `${cleaned.substring(0, 2)}:${cleaned.substring(2)}`;
+      }
+      setEndTime(formatted);
+
+      if (cleaned.length === 4 && startTime.replace(':', '').length === 4) {
+        calculateOvertimeWithParams(startTime, formatted, aircraftType);
       }
     }
   };
@@ -229,7 +238,7 @@ export default function App() {
 
             {/* EINGABE ZEITEN */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HHMM)</Text>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HH:MM)</Text>
               <View style={styles.inputRow}>
                 
                 <View style={styles.inputWrapper}>
@@ -238,10 +247,10 @@ export default function App() {
                     style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
                     value={startTime}
                     onChangeText={handleStartTimeChange}
-                    placeholder="0800"
+                    placeholder="08:00"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
-                    maxLength={4}
+                    maxLength={5}
                     returnKeyType="next"
                     onSubmitEditing={() => endTimeInputRef.current?.focus()}
                     blurOnSubmit={false}
@@ -259,10 +268,10 @@ export default function App() {
                     style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
                     value={endTime}
                     onChangeText={handleEndTimeChange}
-                    placeholder="1645"
+                    placeholder="16:45"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
-                    maxLength={4}
+                    maxLength={5}
                     returnKeyType="done"
                     onSubmitEditing={calculateOvertime}
                   />
@@ -280,21 +289,14 @@ export default function App() {
               </View>
             </View>
 
-            {/* ERGEBNIS ANZEIGE */}
+            {/* ERGEBNIS ANZEIGE (Ohne Zeitfenster, Gesamtdifferenz volle Breite) */}
             <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: result ? theme.successColor : theme.borderColor }]}>
               <Text style={[styles.resultTitle, { color: result ? theme.successColor : theme.subTextColor }]}>
                 BERECHNUNGSERGEBNIS
               </Text>
               
-              <View style={styles.resultGrid}>
-                <View style={[styles.resultBox, { backgroundColor: theme.inputBg, borderColor: theme.borderColor }]}>
-                  <Text style={[styles.resultBoxValue, { color: theme.textColor }]}>
-                    {result ? `${result.startTime.replace(/(\d{2})(\d{2})/, '$1:$2')} - ${result.endTime.replace(/(\d{2})(\d{2})/, '$1:$2')}` : '--:--'}
-                  </Text>
-                  <Text style={[styles.resultBoxLabel, { color: theme.subTextColor }]}>Zeitfenster</Text>
-                </View>
-
-                <View style={[styles.resultBox, { backgroundColor: theme.inputBg, borderColor: theme.borderColor }]}>
+              <View style={styles.singleResultBox}>
+                <View style={[styles.resultBoxFull, { backgroundColor: theme.inputBg, borderColor: theme.borderColor }]}>
                   <Text style={[styles.resultBoxValue, { color: theme.textColor }]}>
                     {result ? `${result.diffMinutes} Min.` : '-- Min.'}
                   </Text>
@@ -331,14 +333,14 @@ export default function App() {
               <View style={styles.guideStep}>
                 <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Startzeit eingeben</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Gib die Startzeit im Format HHMM ein (z. B. 0800 für 08:00 Uhr). Nach der Eingabe von 4 Ziffern springt der Cursor automatisch in das Endzeit-Feld.
+                  Gib die Startzeit ein (z. B. 0800, wird automatisch zu 08:00). Nach der Eingabe von 4 Ziffern springt der Cursor automatisch in das Endzeit-Feld.
                 </Text>
               </View>
 
               <View style={styles.guideStep}>
                 <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>3. Endzeit eingeben & Berechnen</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Gib die Endzeit ein (z. B. 1645). Mit Betätigen von "OK" / "Enter" auf der Tastatur oder dem "BERECHNEN"-Button wird das Ergebnis in Industriezeit (z. B. 1,75) ermittelt.
+                  Gib die Endzeit ein (wird automatisch zu 16:45). Mit Betätigen von "OK" / "Enter" auf der Tastatur oder dem "BERECHNEN"-Button wird das Ergebnis in Industriezeit (z. B. 1,75) ermittelt.
                 </Text>
               </View>
 
@@ -551,20 +553,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 8,
   },
-  resultGrid: {
-    flexDirection: 'row',
-    gap: 8,
+  singleResultBox: {
     marginBottom: 8,
   },
-  resultBox: {
-    flex: 1,
-    padding: 8,
+  resultBoxFull: {
+    padding: 10,
     borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
   },
   resultBoxValue: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
   },
   resultBoxLabel: {
