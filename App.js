@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,92 +7,78 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
-  StatusBar,
-  Alert,
-  Modal,
-  Platform,
-  Share
+  StatusBar
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Safe Native Module Loading mit Try-Catch Fallbacks
-let FileSystem = null;
-let DocumentPicker = null;
-let Notifications = null;
-
-try {
-  FileSystem = require('expo-file-system');
-} catch (e) {
-  console.log('FileSystem module fallback');
-}
-
-try {
-  DocumentPicker = require('expo-document-picker');
-} catch (e) {
-  console.log('DocumentPicker module fallback');
-}
-
-try {
-  Notifications = require('expo-notifications');
-} catch (e) {
-  console.log('Notifications module fallback');
-}
-
-const STORAGE_KEY_HISTORY = '@uberstunden_history_v1';
-const STORAGE_KEY_SETTINGS = '@uberstunden_settings_v1';
 
 export default function App() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [aircraftType, setAircraftType] = useState('B747_A340'); // 'B747_A340' oder 'ALL_OTHERS'
+  const [aircraftType, setAircraftType] = useState('B747_A340');
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [result, setResult] = useState(null);
-  const [history, setHistory] = useState([]);
-  
-  // Backup Modal State
-  const [backupModalVisible, setBackupModalVisible] = useState(false);
-  const [backupJsonText, setBackupJsonText] = useState('');
-  const [isExporting, setIsExporting] = useState(true);
+  const [activeTab, setActiveTab] = useState('calc');
 
   const endTimeInputRef = useRef(null);
 
-  // Initiales Laden der gespeicherten Daten
-  useEffect(() => {
-    loadSavedData();
-  }, []);
+  const parseTimeToMinutes = (hhmm) => {
+    if (hhmm.length !== 4) return null;
+    const hours = parseInt(hhmm.substring(0, 2), 10);
+    const minutes = parseInt(hhmm.substring(2, 4), 10);
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return hours * 60 + minutes;
+  };
 
-  const loadSavedData = async () => {
-    try {
-      const savedHistory = await AsyncStorage.getItem(STORAGE_KEY_HISTORY);
-      const savedSettings = await AsyncStorage.getItem(STORAGE_KEY_SETTINGS);
+  const formatMinutesToIndustrialTime = (totalMinutes) => {
+    const hoursDecimal = totalMinutes / 60;
+    return hoursDecimal.toFixed(2).replace('.', ',');
+  };
 
-      if (savedHistory) setHistory(JSON.parse(savedHistory));
-      if (savedSettings) {
-        const parsedSettings = JSON.parse(savedSettings);
-        if (parsedSettings.aircraftType) setAircraftType(parsedSettings.aircraftType);
+  const calculateOvertimeWithParams = (startStr, endStr, type) => {
+    const startMin = parseTimeToMinutes(startStr);
+    const endMin = parseTimeToMinutes(endStr);
+
+    if (startMin === null || endMin === null) {
+      setResult(null);
+      return;
+    }
+
+    let diffMinutes = endMin - startMin;
+    if (diffMinutes < 0) {
+      diffMinutes += 24 * 60;
+    }
+
+    let intervalCount = 0;
+
+    if (diffMinutes > 30) {
+      const thresholdTime = startMin + 30;
+      let firstIntervalMin = thresholdTime + 1; 
+
+      for (let t = firstIntervalMin; t <= startMin + diffMinutes; t += 15) {
+        intervalCount++;
       }
-    } catch (e) {
-      console.error('Fehler beim Laden der Daten:', e);
     }
+
+    const multiplier = type === 'B747_A340' ? 6 : 4;
+    const calculatedFactorMinutes = intervalCount * 15 * multiplier;
+
+    setResult({
+      startTime: startStr,
+      endTime: endStr,
+      diffMinutes,
+      aircraftType: type,
+      multiplier,
+      formattedResultTime: formatMinutesToIndustrialTime(calculatedFactorMinutes),
+      intervalCount
+    });
   };
 
-  const saveHistoryToStorage = async (newHistory) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(newHistory));
-    } catch (e) {
-      console.error('Fehler beim Speichern der Historie:', e);
-    }
-  };
-
-  const handleAircraftChange = async (type) => {
+  const handleAircraftChange = (type) => {
     setAircraftType(type);
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify({ aircraftType: type }));
-    } catch (e) {
-      console.error('Fehler beim Speichern der Einstellungen:', e);
+    if (startTime.length === 4 && endTime.length === 4) {
+      calculateOvertimeWithParams(startTime, endTime, type);
     }
   };
 
-  // Auto-Focus & Auto-Loop Logik bei 4-stelliger HHMM Eingabe
   const handleStartTimeChange = (text) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length <= 4) {
@@ -102,6 +88,9 @@ export default function App() {
           endTimeInputRef.current?.focus();
         }, 50);
       }
+      if (cleaned.length === 4 && endTime.length === 4) {
+        calculateOvertimeWithParams(cleaned, endTime, aircraftType);
+      }
     }
   };
 
@@ -109,67 +98,14 @@ export default function App() {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length <= 4) {
       setEndTime(cleaned);
-    }
-  };
-
-  // Hilfsfunktion: Wandelt HHMM in Minuten seit Mitternacht um
-  const parseTimeToMinutes = (hhmm) => {
-    if (hhmm.length !== 4) return null;
-    const hours = parseInt(hhmm.substring(0, 2), 10);
-    const minutes = parseInt(hhmm.substring(2, 4), 10);
-    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
-    return hours * 60 + minutes;
-  };
-
-  // Berechnungslogik gemäß den Vorgaben
-  const calculateOvertime = () => {
-    const startMin = parseTimeToMinutes(startTime);
-    const endMin = parseTimeToMinutes(endTime);
-
-    if (startMin === null || endMin === null) {
-      Alert.alert('Ungültige Eingabe', 'Bitte gib Start- und Endzeit im Format HHMM (z.B. 0800 oder 1630) an.');
-      return;
-    }
-
-    let diffMinutes = endMin - startMin;
-    if (diffMinutes < 0) {
-      diffMinutes += 24 * 60; // Tageswechsel (über Nacht)
-    }
-
-    let calculatedFactorPoints = 0;
-    let intervalCount = 0;
-
-    // Vorgabe: Berechnung beginnt ab der 31. Minute Differenz
-    if (diffMinutes > 30) {
-      // Bestimmung des ersten 15-Minuten-Intervall-Rasters (00, 15, 30, 45) nach der Startzeit + 30 Min
-      const thresholdTime = startMin + 30;
-      let nextIntervalMin = Math.ceil(thresholdTime / 15) * 15;
-
-      // Zähle alle 15-Minuten-Rasterschritte bis zur Endzeit
-      for (let t = nextIntervalMin; t <= startMin + diffMinutes; t += 15) {
-        intervalCount++;
+      if (cleaned.length === 4 && startTime.length === 4) {
+        calculateOvertimeWithParams(startTime, cleaned, aircraftType);
       }
-
-      // Pro Intervall 6 Punkte (Multiplikator 6)
-      calculatedFactorPoints = intervalCount * 6;
     }
+  };
 
-    const newResult = {
-      id: Date.now().toString(),
-      date: new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-      time: new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-      startTime,
-      endTime,
-      diffMinutes,
-      aircraftType,
-      calculatedFactorPoints,
-      intervalCount
-    };
-
-    setResult(newResult);
-    const updatedHistory = [newResult, ...history];
-    setHistory(updatedHistory);
-    saveHistoryToStorage(updatedHistory);
+  const calculateOvertime = () => {
+    calculateOvertimeWithParams(startTime, endTime, aircraftType);
   };
 
   const clearInputs = () => {
@@ -178,721 +114,515 @@ export default function App() {
     setResult(null);
   };
 
-  const deleteHistoryItem = (id) => {
-    const updated = history.filter(item => item.id !== id);
-    setHistory(updated);
-    saveHistoryToStorage(updated);
-  };
-
-  const clearAllHistory = () => {
-    Alert.alert(
-      'Historie löschen',
-      'Möchtest du wirklich alle Aufzeichnungen löschen?',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: () => {
-            setHistory([]);
-            saveHistoryToStorage([]);
-          }
-        }
-      ]
-    );
-  };
-
-  // BACKUP & RESTORE LOGIK (Plattformübergreifend)
-  const exportBackup = async () => {
-    try {
-      const historyData = await AsyncStorage.getItem(STORAGE_KEY_HISTORY);
-      const settingsData = await AsyncStorage.getItem(STORAGE_KEY_SETTINGS);
-
-      const backupObj = {
-        app: 'uberstundenrechner',
-        version: 1,
-        timestamp: new Date().toISOString(),
-        data: {
-          history: historyData ? JSON.parse(historyData) : [],
-          settings: settingsData ? JSON.parse(settingsData) : {}
-        }
-      };
-
-      const jsonString = JSON.stringify(backupObj, null, 2);
-
-      // Versuche nativen Export mit FileSystem
-      if (FileSystem && FileSystem.documentDirectory) {
-        const fileUri = `${FileSystem.documentDirectory}uberstunden_backup_${Date.now()}.json`;
-        await FileSystem.writeAsStringAsync(fileUri, jsonString);
-
-        if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
-          try {
-            const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-            if (permissions.granted) {
-              const createdFile = await FileSystem.StorageAccessFramework.createFileAsync(
-                permissions.directoryUri,
-                `uberstunden_backup_${Date.now()}.json`,
-                'application/json'
-              );
-              await FileSystem.writeAsStringAsync(createdFile, jsonString);
-              Alert.alert('Erfolg', 'Backup erfolgreich im gewählten Ordner gespeichert!');
-              return;
-            }
-          } catch (safErr) {
-            console.log('SAF Fallback triggered:', safErr);
-          }
-        }
-
-        // Standard Teilen/Speichern Dialog
-        await Share.share({
-          title: 'Überstunden Rechner Backup',
-          message: jsonString,
-          url: Platform.OS === 'ios' ? fileUri : undefined
-        });
-        return;
-      }
-
-      // Modal Fallback
-      setIsExporting(true);
-      setBackupJsonText(jsonString);
-      setBackupModalVisible(true);
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Export Fehler', 'Backup konnte nicht exportiert werden.');
-    }
-  };
-
-  const importBackup = async () => {
-    try {
-      if (DocumentPicker) {
-        const pickerResult = await DocumentPicker.getDocumentAsync({
-          type: 'application/json',
-          copyToCacheDirectory: true
-        });
-
-        if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
-          const fileUri = pickerResult.assets[0].uri;
-          let content = '';
-
-          if (FileSystem) {
-            content = await FileSystem.readAsStringAsync(fileUri);
-          }
-
-          if (content) {
-            processAndRestoreJson(content);
-            return;
-          }
-        }
-      }
-
-      // Modal Fallback für manuelles Einfügen
-      setIsExporting(false);
-      setBackupJsonText('');
-      setBackupModalVisible(true);
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Import Fehler', 'Datei konnte nicht gelesen werden. Nutze den Text-Import.');
-    }
-  };
-
-  const processAndRestoreJson = (jsonString) => {
-    try {
-      const parsed = JSON.parse(jsonString);
-      if (!parsed.data) {
-        throw new Error('Ungültiges Backup-Format');
-      }
-
-      Alert.alert(
-        'Backup wiederherstellen',
-        'Möchtest du die bestehenden Daten durch dieses Backup überschreiben?',
-        [
-          { text: 'Abbrechen', style: 'cancel' },
-          {
-            text: 'Wiederherstellen',
-            style: 'destructive',
-            onPress: async () => {
-              if (parsed.data.history) {
-                setHistory(parsed.data.history);
-                await AsyncStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(parsed.data.history));
-              }
-              if (parsed.data.settings) {
-                if (parsed.data.settings.aircraftType) {
-                  setAircraftType(parsed.data.settings.aircraftType);
-                }
-                await AsyncStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(parsed.data.settings));
-              }
-              setBackupModalVisible(false);
-              Alert.alert('Erfolg', 'Daten wurden erfolgreich wiederhergestellt.');
-            }
-          }
-        ]
-      );
-    } catch (e) {
-      Alert.alert('Fehler', 'Das JSON-Format ist ungültig oder beschädigt.');
-    }
-  };
+  const theme = isDarkMode ? darkTheme : lightTheme;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#090d16" />
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
+      <StatusBar
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.bg}
+      />
+      <View style={styles.mainContainer}>
         
-        {/* HEADER / TITLE */}
+        {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.title}>OVERTIME // MATRIX</Text>
-          <View style={styles.glowBar} />
-          <Text style={styles.subtitle}>B747 / A340 / A360 & FLEET CALCULATION</Text>
+          <TouchableOpacity
+            style={[styles.themeToggle, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
+            onPress={() => setIsDarkMode(!isDarkMode)}
+          >
+            <Text style={[styles.themeToggleText, { color: theme.primary }]}>
+              {isDarkMode ? '☀️ LIGHT MODE' : '🌙 DARK MODE'}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.title, { color: theme.titleColor }]}>Überstunden Rechner</Text>
+          <View style={[styles.accentLine, { backgroundColor: theme.primary }]} />
         </View>
 
-        {/* TYP SELEKTOR */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>FLUGZEUGTYP WÄHLEN</Text>
-          <View style={styles.typeContainer}>
-            <TouchableOpacity
+        {/* TAB NAVIGATION */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[
+              styles.tabButton,
+              { backgroundColor: theme.cardBg, borderColor: theme.borderColor },
+              activeTab === 'calc' && { backgroundColor: theme.primary, borderColor: theme.primary }
+            ]}
+            onPress={() => setActiveTab('calc')}
+          >
+            <Text
               style={[
-                styles.typeButton,
-                aircraftType === 'B747_A340' && styles.typeButtonActive
+                styles.tabButtonText,
+                { color: theme.textColor },
+                activeTab === 'calc' && { color: isDarkMode ? '#090d16' : '#ffffff', fontWeight: '900' }
               ]}
-              onPress={() => handleAircraftChange('B747_A340')}
             >
-              <Text style={[styles.typeButtonText, aircraftType === 'B747_A340' && styles.typeButtonTextActive]}>
-                B747 & A340/600
-              </Text>
-            </TouchableOpacity>
+              RECHNER
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
+          <TouchableOpacity
+            style={[
+              styles.tabButton,
+              { backgroundColor: theme.cardBg, borderColor: theme.borderColor },
+              activeTab === 'guide' && { backgroundColor: theme.primary, borderColor: theme.primary }
+            ]}
+            onPress={() => setActiveTab('guide')}
+          >
+            <Text
               style={[
-                styles.typeButton,
-                aircraftType === 'ALL_OTHERS' && styles.typeButtonActive
+                styles.tabButtonText,
+                { color: theme.textColor },
+                activeTab === 'guide' && { color: isDarkMode ? '#090d16' : '#ffffff', fontWeight: '900' }
               ]}
-              onPress={() => handleAircraftChange('ALL_OTHERS')}
             >
-              <Text style={[styles.typeButtonText, aircraftType === 'ALL_OTHERS' && styles.typeButtonTextActive]}>
-                Alle anderen
+              ANLEITUNG
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* TAB 1: RECHNER */}
+        {activeTab === 'calc' ? (
+          <View style={styles.calcViewWrapper}>
+            {/* FLUGZEUGTYP SELEKTOR */}
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>FLUGZEUGTYP WÄHLEN</Text>
+              <View style={styles.typeContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    { backgroundColor: theme.inputBg, borderColor: theme.borderColor },
+                    aircraftType === 'B747_A340' && { backgroundColor: theme.activeBtnBg, borderColor: theme.primary }
+                  ]}
+                  onPress={() => handleAircraftChange('B747_A340')}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      { color: theme.textColor },
+                      aircraftType === 'B747_A340' && { color: theme.primary, fontWeight: '800' }
+                    ]}
+                  >
+                    B747 & A340/600
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    { backgroundColor: theme.inputBg, borderColor: theme.borderColor },
+                    aircraftType === 'ALL_OTHERS' && { backgroundColor: theme.activeBtnBg, borderColor: theme.primary }
+                  ]}
+                  onPress={() => handleAircraftChange('ALL_OTHERS')}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      { color: theme.textColor },
+                      aircraftType === 'ALL_OTHERS' && { color: theme.primary, fontWeight: '800' }
+                    ]}
+                  >
+                    Alle anderen
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* EINGABE ZEITEN */}
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HHMM)</Text>
+              <View style={styles.inputRow}>
+                
+                <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>STARTZEIT</Text>
+                  <TextInput
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
+                    value={startTime}
+                    onChangeText={handleStartTimeChange}
+                    placeholder="0800"
+                    placeholderTextColor={theme.placeholderColor}
+                    keyboardType="numeric"
+                    maxLength={4}
+                    returnKeyType="next"
+                    onSubmitEditing={() => endTimeInputRef.current?.focus()}
+                    blurOnSubmit={false}
+                  />
+                </View>
+
+                <View style={styles.inputSeparator}>
+                  <Text style={[styles.separatorText, { color: theme.primary }]}>→</Text>
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>ENDZEIT</Text>
+                  <TextInput
+                    ref={endTimeInputRef}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
+                    value={endTime}
+                    onChangeText={handleEndTimeChange}
+                    placeholder="1645"
+                    placeholderTextColor={theme.placeholderColor}
+                    keyboardType="numeric"
+                    maxLength={4}
+                    returnKeyType="done"
+                    onSubmitEditing={calculateOvertime}
+                  />
+                </View>
+
+              </View>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.primary }]} onPress={calculateOvertime}>
+                  <Text style={[styles.actionButtonText, { color: isDarkMode ? '#090d16' : '#ffffff' }]}>BERECHNEN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, borderWidth: 1 }]} onPress={clearInputs}>
+                  <Text style={[styles.actionButtonText, { color: theme.subTextColor }]}>RESET</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ERGEBNIS ANZEIGE */}
+            <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: result ? theme.successColor : theme.borderColor }]}>
+              <Text style={[styles.resultTitle, { color: result ? theme.successColor : theme.subTextColor }]}>
+                BERECHNUNGSERGEBNIS
               </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              
+              <View style={styles.resultGrid}>
+                <View style={[styles.resultBox, { backgroundColor: theme.inputBg, borderColor: theme.borderColor }]}>
+                  <Text style={[styles.resultBoxValue, { color: theme.textColor }]}>
+                    {result ? `${result.startTime.replace(/(\d{2})(\d{2})/, '$1:$2')} - ${result.endTime.replace(/(\d{2})(\d{2})/, '$1:$2')}` : '--:--'}
+                  </Text>
+                  <Text style={[styles.resultBoxLabel, { color: theme.subTextColor }]}>Zeitfenster</Text>
+                </View>
 
-        {/* EINGABE ZEITEN */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>EINGABE ZEITFENSTER (HHMM)</Text>
-          <View style={styles.inputRow}>
-            
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputSubLabel}>STARTZEIT</Text>
-              <TextInput
-                style={styles.timeInput}
-                value={startTime}
-                onChangeText={handleStartTimeChange}
-                placeholder="0800"
-                placeholderTextColor="#3a4b6e"
-                keyboardType="numeric"
-                maxLength={4}
-              />
-            </View>
+                <View style={[styles.resultBox, { backgroundColor: theme.inputBg, borderColor: theme.borderColor }]}>
+                  <Text style={[styles.resultBoxValue, { color: theme.textColor }]}>
+                    {result ? `${result.diffMinutes} Min.` : '-- Min.'}
+                  </Text>
+                  <Text style={[styles.resultBoxLabel, { color: theme.subTextColor }]}>Gesamtdifferenz</Text>
+                </View>
+              </View>
 
-            <View style={styles.inputSeparator}>
-              <Text style={styles.separatorText}>→</Text>
-            </View>
-
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputSubLabel}>ENDZEIT</Text>
-              <TextInput
-                ref={endTimeInputRef}
-                style={styles.timeInput}
-                value={endTime}
-                onChangeText={handleEndTimeChange}
-                placeholder="1645"
-                placeholderTextColor="#3a4b6e"
-                keyboardType="numeric"
-                maxLength={4}
-              />
-            </View>
-
-          </View>
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.calcButton} onPress={calculateOvertime}>
-              <Text style={styles.calcButtonText}>BERECHNEN</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.clearButton} onPress={clearInputs}>
-              <Text style={styles.clearButtonText}>RESET</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* ERGEBNIS ANZEIGE */}
-        {result && (
-          <View style={[styles.card, styles.resultCard]}>
-            <Text style={styles.resultTitle}>BERECHNUNGSERGEBNIS</Text>
-            
-            <View style={styles.resultGrid}>
-              <View style={styles.resultBox}>
-                <Text style={styles.resultBoxValue}>
-                  {result.startTime.replace(/(\d{2})(\d{2})/, '$1:$2')} - {result.endTime.replace(/(\d{2})(\d{2})/, '$1:$2')}
+              <View style={[styles.resultHighlight, { backgroundColor: theme.highlightBg, borderColor: result ? theme.successColor : theme.borderColor }]}>
+                <Text style={[styles.resultHighlightLabel, { color: result ? theme.successColor : theme.subTextColor }]}>
+                  BERECHNETE ÜBERSTUNDEN (INDUSTRIEZEIT)
                 </Text>
-                <Text style={styles.resultBoxLabel}>Zeitfenster</Text>
+                <Text style={[styles.resultHighlightValue, { color: result ? theme.successColor : theme.subTextColor }]}>
+                  {result ? result.formattedResultTime : '0,00'}
+                </Text>
+                <Text style={[styles.resultHighlightSub, { color: theme.subTextColor }]}>
+                  {result ? `${result.intervalCount} Intervall(e) × 15 Min. × ${result.multiplier}` : 'Keine Eingabe erfolgt'}
+                </Text>
               </View>
-
-              <View style={styles.resultBox}>
-                <Text style={styles.resultBoxValue}>{result.diffMinutes} Min.</Text>
-                <Text style={styles.resultBoxLabel}>Gesamtdifferenz</Text>
-              </View>
-            </View>
-
-            <View style={styles.resultHighlight}>
-              <Text style={styles.resultHighlightLabel}>PUNKTE / ERGEBNIS (x6)</Text>
-              <Text style={styles.resultHighlightValue}>+{result.calculatedFactorPoints}</Text>
-              <Text style={styles.resultHighlightSub}>
-                {result.intervalCount} Intervall(e) à 15 Min. ab 31. Minute
-              </Text>
             </View>
           </View>
+        ) : (
+          /* TAB 2: ANLEITUNG & ENTWICKLERINFO */
+          <ScrollView contentContainerStyle={styles.guideScrollContainer} keyboardShouldPersistTaps="handled">
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>APP ANLEITUNG & BEDIENUNG</Text>
+              
+              <View style={styles.guideStep}>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>1. Flugzeugtyp auswählen</Text>
+                <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
+                  Wähle ganz oben aus, ob es sich um eine B747 oder A340/600 (Faktor 6) oder um "Alle anderen" (Faktor 4) handelt. Die Berechnung passt sich beim Umschalten sofort an.
+                </Text>
+              </View>
+
+              <View style={styles.guideStep}>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Startzeit eingeben</Text>
+                <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
+                  Gib die Startzeit im Format HHMM ein (z. B. 0800 für 08:00 Uhr). Nach der Eingabe von 4 Ziffern springt der Cursor automatisch in das Endzeit-Feld.
+                </Text>
+              </View>
+
+              <View style={styles.guideStep}>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>3. Endzeit eingeben & Berechnen</Text>
+                <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
+                  Gib die Endzeit ein (z. B. 1645). Mit Betätigen von "OK" / "Enter" auf der Tastatur oder dem "BERECHNEN"-Button wird das Ergebnis in Industriezeit (z. B. 1,75) ermittelt.
+                </Text>
+              </View>
+
+              <View style={styles.guideStep}>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>4. Berechnungslogik</Text>
+                <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
+                  Ab einer Zeitdifferenz von mehr als 30 Minuten wird ab dem nächsten 15-Minuten-Raster (z. B. bei Start 10:00 ab Minute 46: 10:46, 11:01, 11:16, 11:31 usw.) gerechnet und mit dem jeweiligen Typen-Faktor multipliziert.
+                </Text>
+              </View>
+            </View>
+
+            {/* ENTWICKLERINFO */}
+            <View style={[styles.card, styles.devCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+              <Text style={[styles.devTitle, { color: theme.primary }]}>ENTWICKLERINFORMATIONEN</Text>
+              <View style={styles.devRow}>
+                <Text style={[styles.devLabel, { color: theme.subTextColor }]}>Entwickler:</Text>
+                <Text style={[styles.devValue, { color: theme.textColor }]}>Özgür Cetin</Text>
+              </View>
+              <View style={styles.devRow}>
+                <Text style={[styles.devLabel, { color: theme.subTextColor }]}>E-Mail:</Text>
+                <Text style={[styles.devValue, { color: theme.textColor }]}>ozgur.cetin@web.de</Text>
+              </View>
+            </View>
+          </ScrollView>
         )}
 
-        {/* HISTORIE */}
-        <View style={styles.card}>
-          <View style={styles.historyHeader}>
-            <Text style={styles.cardLabel}>VERLAUF / HISTORIE</Text>
-            {history.length > 0 && (
-              <TouchableOpacity onPress={clearAllHistory}>
-                <Text style={styles.deleteLink}>Alle löschen</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {history.length === 0 ? (
-            <Text style={styles.emptyText}>Keine Aufzeichnungen vorhanden.</Text>
-          ) : (
-            history.map((item) => (
-              <View key={item.id} style={styles.historyItem}>
-                <View>
-                  <Text style={styles.historyMainText}>
-                    {item.startTime.replace(/(\d{2})(\d{2})/, '$1:$2')} - {item.endTime.replace(/(\d{2})(\d{2})/, '$1:$2')} ({item.diffMinutes}m)
-                  </Text>
-                  <Text style={styles.historySubText}>
-                    {item.date} • {item.aircraftType === 'B747_A340' ? 'B747 & A340/600' : 'Andere'}
-                  </Text>
-                </View>
-                <View style={styles.historyRight}>
-                  <Text style={styles.historyPoints}>+{item.calculatedFactorPoints}</Text>
-                  <TouchableOpacity onPress={() => deleteHistoryItem(item.id)} style={styles.deleteBtn}>
-                    <Text style={styles.deleteBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* BACKUP & RESTORE BUTTONS */}
-        <View style={styles.backupContainer}>
-          <TouchableOpacity style={styles.backupBtn} onPress={exportBackup}>
-            <Text style={styles.backupBtnText}>BACKUP EXPORT</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backupBtn} onPress={importBackup}>
-            <Text style={styles.backupBtnText}>BACKUP IMPORT</Text>
-          </TouchableOpacity>
-        </View>
-
-      </ScrollView>
-
-      {/* BACKUP / TEXT MODAL (FALLBACK) */}
-      <Modal
-        visible={backupModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setBackupModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {isExporting ? 'BACKUP EXPORT (JSON)' : 'BACKUP IMPORT (JSON)'}
-            </Text>
-            <Text style={styles.modalSub}>
-              {isExporting
-                ? 'Kopiere den folgenden JSON-Code zum Sichern:'
-                : 'Füge den gesicherten JSON-Code hier ein:'}
-            </Text>
-
-            <TextInput
-              style={styles.modalInput}
-              multiline={true}
-              value={backupJsonText}
-              onChangeText={setBackupJsonText}
-              editable={!isExporting}
-              placeholder='{"app": "uberstundenrechner", ...}'
-              placeholderTextColor="#3a4b6e"
-            />
-
-            <View style={styles.modalActionRow}>
-              {!isExporting && (
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnPrimary]}
-                  onPress={() => processAndRestoreJson(backupJsonText)}
-                >
-                  <Text style={styles.modalBtnText}>Wiederherstellen</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnSecondary]}
-                onPress={() => setBackupModalVisible(false)}
-              >
-                <Text style={styles.modalBtnText}>Schließen</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      </View>
     </SafeAreaView>
   );
 }
 
-// SCI-FI DASHBOARD / FUTURISTIC MINIMALISM STYLES
+const lightTheme = {
+  bg: '#f4f6f9',
+  cardBg: '#ffffff',
+  inputBg: '#f8fafc',
+  activeBtnBg: '#e0f2fe',
+  resultBg: '#f0fdf4',
+  highlightBg: '#dcfce7',
+  titleColor: '#0f172a',
+  textColor: '#1e293b',
+  subTextColor: '#64748b',
+  placeholderColor: '#94a3b8',
+  borderColor: '#e2e8f0',
+  primary: '#0284c7',
+  successColor: '#16a34a'
+};
+
+const darkTheme = {
+  bg: '#090d16',
+  cardBg: '#111827',
+  inputBg: '#090d16',
+  activeBtnBg: 'rgba(0, 242, 254, 0.12)',
+  resultBg: '#0e1726',
+  highlightBg: 'rgba(16, 185, 129, 0.1)',
+  titleColor: '#f8fafc',
+  textColor: '#f8fafc',
+  subTextColor: '#64748b',
+  placeholderColor: '#3a4b6e',
+  borderColor: '#1e293b',
+  primary: '#00f2fe',
+  successColor: '#10b981'
+};
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#090d16',
   },
-  container: {
-    padding: 16,
-    paddingBottom: 40,
+  mainContainer: {
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   header: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginBottom: 8,
+    position: 'relative',
+  },
+  themeToggle: {
+    alignSelf: 'flex-end',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    marginBottom: 4,
+  },
+  themeToggleText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
   title: {
-    color: '#00f2fe',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
-    letterSpacing: 3,
+    letterSpacing: 1.2,
     textAlign: 'center',
   },
-  glowBar: {
-    width: 140,
+  accentLine: {
+    width: 80,
     height: 3,
-    backgroundColor: '#00f2fe',
-    marginTop: 6,
-    shadowColor: '#00f2fe',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 8,
-    elevation: 5,
+    borderRadius: 2,
+    marginTop: 4,
   },
-  subtitle: {
-    color: '#5c73a3',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginTop: 8,
-  },
-  card: {
-    backgroundColor: '#111827',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    padding: 16,
-    marginBottom: 16,
-  },
-  cardLabel: {
-    color: '#00f2fe',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  typeContainer: {
+  tabContainer: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    marginBottom: 10,
   },
-  typeButton: {
+  tabButton: {
     flex: 1,
-    backgroundColor: '#0d1322',
     borderWidth: 1,
-    borderColor: '#2d3b55',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
   },
-  typeButtonActive: {
-    backgroundColor: 'rgba(0, 242, 254, 0.12)',
-    borderColor: '#00f2fe',
+  tabButtonText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  calcViewWrapper: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  guideScrollContainer: {
+    paddingBottom: 20,
+  },
+  card: {
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 8,
+  },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  typeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeButton: {
+    flex: 1,
+    borderWidth: 1,
+    paddingVertical: 11,
+    borderRadius: 8,
+    alignItems: 'center',
   },
   typeButtonText: {
-    color: '#64748b',
-    fontWeight: '700',
     fontSize: 12,
-  },
-  typeButtonTextActive: {
-    color: '#00f2fe',
+    fontWeight: '600',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   inputWrapper: {
     flex: 1,
   },
   inputSubLabel: {
-    color: '#475569',
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 1,
-    marginBottom: 6,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   timeInput: {
-    backgroundColor: '#090d16',
     borderWidth: 1,
-    borderColor: '#2d3b55',
     borderRadius: 8,
-    color: '#ffffff',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     textAlign: 'center',
-    paddingVertical: 10,
+    paddingVertical: 8,
     letterSpacing: 2,
   },
   inputSeparator: {
-    paddingHorizontal: 12,
-    paddingTop: 16,
+    paddingHorizontal: 8,
+    paddingTop: 12,
   },
   separatorText: {
-    color: '#00f2fe',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
-  calcButton: {
-    flex: 3,
-    backgroundColor: '#00f2fe',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    shadowColor: '#00f2fe',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  calcButtonText: {
-    color: '#090d16',
-    fontWeight: '900',
-    fontSize: 14,
-    letterSpacing: 1.5,
-  },
-  clearButton: {
+  actionButton: {
     flex: 1,
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#334155',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
-  clearButtonText: {
-    color: '#94a3b8',
-    fontWeight: '800',
+  actionButtonText: {
+    fontWeight: '900',
     fontSize: 12,
+    letterSpacing: 1.1,
   },
   resultCard: {
-    borderColor: '#00f2fe',
-    backgroundColor: '#0e1726',
+    borderWidth: 1.5,
+    marginBottom: 0,
   },
   resultTitle: {
-    color: '#10b981',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 1.5,
-    marginBottom: 12,
+    letterSpacing: 1.2,
+    marginBottom: 8,
   },
   resultGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 8,
   },
   resultBox: {
     flex: 1,
-    backgroundColor: '#090d16',
-    padding: 10,
+    padding: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1e293b',
     alignItems: 'center',
   },
   resultBoxValue: {
-    color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   resultBoxLabel: {
-    color: '#475569',
     fontSize: 9,
-    marginTop: 4,
+    marginTop: 2,
     fontWeight: '700',
   },
   resultHighlight: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderWidth: 1,
-    borderColor: '#10b981',
     borderRadius: 8,
-    padding: 14,
+    padding: 10,
     alignItems: 'center',
   },
   resultHighlightLabel: {
-    color: '#10b981',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
   },
   resultHighlightValue: {
-    color: '#10b981',
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '900',
-    marginVertical: 4,
+    marginVertical: 2,
   },
   resultHighlightSub: {
-    color: '#64748b',
     fontSize: 10,
   },
-  historyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  guideStep: {
+    marginBottom: 14,
   },
-  deleteLink: {
-    color: '#ef4444',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  emptyText: {
-    color: '#475569',
-    fontSize: 12,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginVertical: 10,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#090d16',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    marginTop: 8,
-  },
-  historyMainText: {
-    color: '#f8fafc',
-    fontWeight: '800',
+  guideStepTitle: {
     fontSize: 13,
-  },
-  historySubText: {
-    color: '#475569',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  historyRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  historyPoints: {
-    color: '#10b981',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  deleteBtn: {
-    padding: 4,
-  },
-  deleteBtnText: {
-    color: '#64748b',
-    fontSize: 14,
-  },
-  backupContainer: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
-  },
-  backupBtn: {
-    flex: 1,
-    backgroundColor: '#0d1322',
-    borderWidth: 1,
-    borderColor: '#1e293b',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  backupBtnText: {
-    color: '#64748b',
-    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 1,
+    marginBottom: 4,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    padding: 20,
+  guideStepDesc: {
+    fontSize: 12,
+    lineHeight: 18,
   },
-  modalContent: {
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: '#00f2fe',
-    borderRadius: 12,
-    padding: 20,
+  devCard: {
+    marginTop: 4,
   },
-  modalTitle: {
-    color: '#00f2fe',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+  devTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
     marginBottom: 6,
   },
-  modalSub: {
-    color: '#94a3b8',
-    fontSize: 11,
-    marginBottom: 12,
-  },
-  modalInput: {
-    backgroundColor: '#090d16',
-    borderColor: '#1e293b',
-    borderWidth: 1,
-    borderRadius: 8,
-    color: '#10b981',
-    fontSize: 10,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    height: 180,
-    padding: 10,
-    textAlignVertical: 'top',
-  },
-  modalActionRow: {
+  devRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
+    justifyContent: 'space-between',
+    marginVertical: 3,
   },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalBtnPrimary: {
-    backgroundColor: '#00f2fe',
-  },
-  modalBtnSecondary: {
-    backgroundColor: '#1e293b',
-  },
-  modalBtnText: {
-    color: '#090d16',
-    fontWeight: '900',
+  devLabel: {
     fontSize: 12,
+    fontWeight: '600',
+  },
+  devValue: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
