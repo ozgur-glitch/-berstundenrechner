@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Überstundenrechner",
+    "slug": "uberstundenrechner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#090d16"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ozgrcetn.uberstundenrechner"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./icon.png",
+        "backgroundColor": "#090d16"
+      },
+      "package": "com.ozgrcetn.uberstundenrechner"
+    },
+    "web": {
+      "favicon": "./icon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "71a45068-6ed2-4608-be13-69de59a01285"
+      }
+    },
+    "owner": "ozgrcetn"
+  }
+}
