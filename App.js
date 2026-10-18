@@ -16,16 +16,51 @@ export default function App() {
   const [aircraftType, setAircraftType] = useState('B747_A340');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState('calc');
 
+  const startTimeInputRef = useRef(null);
   const endTimeInputRef = useRef(null);
 
-  const parseTimeToMinutes = (hhmm) => {
-    const cleaned = hhmm.replace(':', '');
-    if (cleaned.length !== 4) return null;
-    const hours = parseInt(cleaned.substring(0, 2), 10);
-    const minutes = parseInt(cleaned.substring(2, 4), 10);
-    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  // Strikte Validierung mit Zurücksetzung auf 00:00 bei Überschreitung
+  const processAndValidateTimeInput = (text) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return { formatted: '', isError: false };
+
+    let hours = cleaned.substring(0, 2);
+    let minutes = cleaned.substring(2, 4);
+
+    // Prüfung der Stunden (> 23 -> Fehler -> Nullstellung)
+    if (hours.length === 2) {
+      const hNum = parseInt(hours, 10);
+      if (hNum > 23) {
+        return { formatted: '00:00', isError: true };
+      }
+    }
+
+    // Prüfung der Minuten (> 59 -> Fehler -> Nullstellung)
+    if (minutes.length === 2) {
+      const mNum = parseInt(minutes, 10);
+      if (mNum > 59) {
+        return { formatted: '00:00', isError: true };
+      }
+    }
+
+    let formatted = hours;
+    if (cleaned.length > 2) {
+      formatted = `${hours}:${minutes}`;
+    }
+
+    return { formatted, isError: false };
+  };
+
+  const parseTimeToMinutes = (hhmmStr) => {
+    if (!hhmmStr || hhmmStr.length < 5) return null;
+    const parts = hhmmStr.split(':');
+    if (parts.length !== 2) return null;
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
     return hours * 60 + minutes;
   };
 
@@ -73,43 +108,72 @@ export default function App() {
 
   const handleAircraftChange = (type) => {
     setAircraftType(type);
-    if (startTime.replace(':', '').length === 4 && endTime.replace(':', '').length === 4) {
+    if (startTime.length === 5 && endTime.length === 5) {
       calculateOvertimeWithParams(startTime, endTime, type);
     }
   };
 
   const handleStartTimeChange = (text) => {
-    const cleaned = text.replace(/[^0-9]/g, '');
-    if (cleaned.length <= 4) {
-      let formatted = cleaned;
-      if (cleaned.length > 2) {
-        formatted = `${cleaned.substring(0, 2)}:${cleaned.substring(2)}`;
-      }
-      setStartTime(formatted);
+    let inputToProcess = text;
+    if (startTime === '00:00' && text.length > 5) {
+      inputToProcess = text.slice(-1);
+    }
 
-      if (cleaned.length === 4) {
-        setTimeout(() => {
-          endTimeInputRef.current?.focus();
-        }, 50);
-      }
-      if (cleaned.length === 4 && endTime.replace(':', '').length === 4) {
-        calculateOvertimeWithParams(formatted, endTime, aircraftType);
-      }
+    const { formatted, isError } = processAndValidateTimeInput(inputToProcess);
+
+    if (isError) {
+      setStartTime('00:00');
+      setErrorMsg('Ungültige Startzeit! Auf 00:00 zurückgesetzt.');
+      setResult(null);
+      setTimeout(() => {
+        startTimeInputRef.current?.setSelection(0, 5);
+      }, 10);
+      return;
+    }
+
+    setErrorMsg('');
+    setStartTime(formatted);
+
+    const rawCleaned = inputToProcess.replace(/[^0-9]/g, '');
+    if (rawCleaned.length === 4) {
+      setTimeout(() => {
+        endTimeInputRef.current?.focus();
+        endTimeInputRef.current?.setSelection(0, 5);
+      }, 50);
+    }
+
+    if (formatted.length === 5 && endTime.length === 5) {
+      calculateOvertimeWithParams(formatted, endTime, aircraftType);
+    } else {
+      setResult(null);
     }
   };
 
   const handleEndTimeChange = (text) => {
-    const cleaned = text.replace(/[^0-9]/g, '');
-    if (cleaned.length <= 4) {
-      let formatted = cleaned;
-      if (cleaned.length > 2) {
-        formatted = `${cleaned.substring(0, 2)}:${cleaned.substring(2)}`;
-      }
-      setEndTime(formatted);
+    let inputToProcess = text;
+    if (endTime === '00:00' && text.length > 5) {
+      inputToProcess = text.slice(-1);
+    }
 
-      if (cleaned.length === 4 && startTime.replace(':', '').length === 4) {
-        calculateOvertimeWithParams(startTime, formatted, aircraftType);
-      }
+    const { formatted, isError } = processAndValidateTimeInput(inputToProcess);
+
+    if (isError) {
+      setEndTime('00:00');
+      setErrorMsg('Ungültige Endzeit! Auf 00:00 zurückgesetzt.');
+      setResult(null);
+      setTimeout(() => {
+        endTimeInputRef.current?.setSelection(0, 5);
+      }, 10);
+      return;
+    }
+
+    setErrorMsg('');
+    setEndTime(formatted);
+
+    if (startTime.length === 5 && formatted.length === 5) {
+      calculateOvertimeWithParams(startTime, formatted, aircraftType);
+    } else {
+      setResult(null);
     }
   };
 
@@ -121,6 +185,7 @@ export default function App() {
     setStartTime('');
     setEndTime('');
     setResult(null);
+    setErrorMsg('');
   };
 
   const theme = isDarkMode ? darkTheme : lightTheme;
@@ -239,20 +304,32 @@ export default function App() {
             {/* EINGABE ZEITEN */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
               <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HH:MM)</Text>
+              
+              {errorMsg ? <Text style={[styles.errorText, { color: theme.errorColor }]}>{errorMsg}</Text> : null}
+
               <View style={styles.inputRow}>
                 
                 <View style={styles.inputWrapper}>
                   <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>STARTZEIT</Text>
                   <TextInput
+                    ref={startTimeInputRef}
                     style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
                     value={startTime}
                     onChangeText={handleStartTimeChange}
+                    onFocus={() => {
+                      if (startTime === '00:00') {
+                        startTimeInputRef.current?.setSelection(0, 5);
+                      }
+                    }}
                     placeholder="08:00"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
                     maxLength={5}
                     returnKeyType="next"
-                    onSubmitEditing={() => endTimeInputRef.current?.focus()}
+                    onSubmitEditing={() => {
+                      endTimeInputRef.current?.focus();
+                      endTimeInputRef.current?.setSelection(0, 5);
+                    }}
                     blurOnSubmit={false}
                   />
                 </View>
@@ -268,6 +345,11 @@ export default function App() {
                     style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
                     value={endTime}
                     onChangeText={handleEndTimeChange}
+                    onFocus={() => {
+                      if (endTime === '00:00') {
+                        endTimeInputRef.current?.setSelection(0, 5);
+                      }
+                    }}
                     placeholder="16:45"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
@@ -289,7 +371,7 @@ export default function App() {
               </View>
             </View>
 
-            {/* ERGEBNIS ANZEIGE (Ohne Zeitfenster, Gesamtdifferenz volle Breite) */}
+            {/* ERGEBNIS ANZEIGE */}
             <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: result ? theme.successColor : theme.borderColor }]}>
               <Text style={[styles.resultTitle, { color: result ? theme.successColor : theme.subTextColor }]}>
                 BERECHNUNGSERGEBNIS
@@ -331,16 +413,16 @@ export default function App() {
               </View>
 
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Startzeit eingeben</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Start- und Endzeit eingeben</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Gib die Startzeit ein (z. B. 0800, wird automatisch zu 08:00). Nach der Eingabe von 4 Ziffern springt der Cursor automatisch in das Endzeit-Feld.
+                  Gib die Zeiten im Format HH:MM ein. Bei Fehleingaben (z.B. Stunden > 23 oder Minuten > 59) wird das jeweilige Feld auf 00:00 zurückgesetzt und der Cursor springt an den Anfang, sodass du sofort weitertippen kannst.
                 </Text>
               </View>
 
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>3. Endzeit eingeben & Berechnen</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>3. Berechnen</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Gib die Endzeit ein (wird automatisch zu 16:45). Mit Betätigen von "OK" / "Enter" auf der Tastatur oder dem "BERECHNEN"-Button wird das Ergebnis in Industriezeit (z. B. 1,75) ermittelt.
+                  Mit Betätigen von "OK" / "Enter" auf der Tastatur oder dem "BERECHNEN"-Button wird das Ergebnis in Industriezeit (z. B. 1,75) ermittelt.
                 </Text>
               </View>
 
@@ -385,7 +467,8 @@ const lightTheme = {
   placeholderColor: '#94a3b8',
   borderColor: '#e2e8f0',
   primary: '#0284c7',
-  successColor: '#16a34a'
+  successColor: '#16a34a',
+  errorColor: '#dc2626'
 };
 
 const darkTheme = {
@@ -401,7 +484,8 @@ const darkTheme = {
   placeholderColor: '#3a4b6e',
   borderColor: '#1e293b',
   primary: '#00f2fe',
-  successColor: '#10b981'
+  successColor: '#10b981',
+  errorColor: '#ef4444'
 };
 
 const styles = StyleSheet.create({
@@ -479,6 +563,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
     marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 10,
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
   },
   typeContainer: {
     flexDirection: 'row',
