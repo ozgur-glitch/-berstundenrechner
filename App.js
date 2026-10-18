@@ -123,7 +123,7 @@ export default function App() {
 
     if (isError) {
       setStartTime('00:00');
-      setErrorMsg('Ungültige Startzeit! Auf 00:00 zurückgesetzt.');
+      setErrorMsg('Ungültige Zeit für STD! Auf 00:00 zurückgesetzt.');
       setResult(null);
       setTimeout(() => {
         startTimeInputRef.current?.setSelection(0, 5);
@@ -159,7 +159,7 @@ export default function App() {
 
     if (isError) {
       setEndTime('00:00');
-      setErrorMsg('Ungültige Endzeit! Auf 00:00 zurückgesetzt.');
+      setErrorMsg('Ungültige Zeit für OFB! Auf 00:00 zurückgesetzt.');
       setResult(null);
       setTimeout(() => {
         endTimeInputRef.current?.setSelection(0, 5);
@@ -257,7 +257,78 @@ export default function App() {
         {/* TAB 1: RECHNER */}
         {activeTab === 'calc' ? (
           <View style={styles.calcViewWrapper}>
-            {/* FLUGZEUGTYP SELEKTOR */}
+            
+            {/* EINGABE ZEITEN (Jetzt ganz oben) */}
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HH:MM)</Text>
+              
+              {errorMsg ? <Text style={[styles.errorText, { color: theme.errorColor }]}>{errorMsg}</Text> : null}
+
+              <View style={styles.inputRow}>
+                
+                <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>STD</Text>
+                  <TextInput
+                    ref={startTimeInputRef}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
+                    value={startTime}
+                    onChangeText={handleStartTimeChange}
+                    onFocus={() => {
+                      if (startTime === '00:00') {
+                        startTimeInputRef.current?.setSelection(0, 5);
+                      }
+                    }}
+                    placeholder="08:00"
+                    placeholderTextColor={theme.placeholderColor}
+                    keyboardType="numeric"
+                    maxLength={5}
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      endTimeInputRef.current?.focus();
+                      endTimeInputRef.current?.setSelection(0, 5);
+                    }}
+                    blurOnSubmit={false}
+                  />
+                </View>
+
+                <View style={styles.inputSeparator}>
+                  <Text style={[styles.separatorText, { color: theme.primary }]}>→</Text>
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>OFB</Text>
+                  <TextInput
+                    ref={endTimeInputRef}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
+                    value={endTime}
+                    onChangeText={handleEndTimeChange}
+                    onFocus={() => {
+                      if (endTime === '00:00') {
+                        endTimeInputRef.current?.setSelection(0, 5);
+                      }
+                    }}
+                    placeholder="16:45"
+                    placeholderTextColor={theme.placeholderColor}
+                    keyboardType="numeric"
+                    maxLength={5}
+                    returnKeyType="done"
+                    onSubmitEditing={calculateOvertime}
+                  />
+                </View>
+
+              </View>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.primary }]} onPress={calculateOvertime}>
+                  <Text style={[styles.actionButtonText, { color: isDarkMode ? '#090d16' : '#ffffff' }]}>BERECHNEN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, borderWidth: 1 }]} onPress={clearInputs}>
+                  <Text style={[styles.actionButtonText, { color: theme.subTextColor }]}>RESET</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* FLUGZEUGTYP SELEKTOR (Jetzt darunter) */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
               <Text style={[styles.cardLabel, { color: theme.primary }]}>FLUGZEUGTYP WÄHLEN</Text>
               <View style={styles.typeContainer}>
@@ -301,76 +372,6 @@ export default function App() {
               </View>
             </View>
 
-            {/* EINGABE ZEITEN */}
-            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HH:MM)</Text>
-              
-              {errorMsg ? <Text style={[styles.errorText, { color: theme.errorColor }]}>{errorMsg}</Text> : null}
-
-              <View style={styles.inputRow}>
-                
-                <View style={styles.inputWrapper}>
-                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>STARTZEIT</Text>
-                  <TextInput
-                    ref={startTimeInputRef}
-                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
-                    value={startTime}
-                    onChangeText={handleStartTimeChange}
-                    onFocus={() => {
-                      if (startTime === '00:00') {
-                        startTimeInputRef.current?.setSelection(0, 5);
-                      }
-                    }}
-                    placeholder="08:00"
-                    placeholderTextColor={theme.placeholderColor}
-                    keyboardType="numeric"
-                    maxLength={5}
-                    returnKeyType="next"
-                    onSubmitEditing={() => {
-                      endTimeInputRef.current?.focus();
-                      endTimeInputRef.current?.setSelection(0, 5);
-                    }}
-                    blurOnSubmit={false}
-                  />
-                </View>
-
-                <View style={styles.inputSeparator}>
-                  <Text style={[styles.separatorText, { color: theme.primary }]}>→</Text>
-                </View>
-
-                <View style={styles.inputWrapper}>
-                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>ENDZEIT</Text>
-                  <TextInput
-                    ref={endTimeInputRef}
-                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor }]}
-                    value={endTime}
-                    onChangeText={handleEndTimeChange}
-                    onFocus={() => {
-                      if (endTime === '00:00') {
-                        endTimeInputRef.current?.setSelection(0, 5);
-                      }
-                    }}
-                    placeholder="16:45"
-                    placeholderTextColor={theme.placeholderColor}
-                    keyboardType="numeric"
-                    maxLength={5}
-                    returnKeyType="done"
-                    onSubmitEditing={calculateOvertime}
-                  />
-                </View>
-
-              </View>
-
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.primary }]} onPress={calculateOvertime}>
-                  <Text style={[styles.actionButtonText, { color: isDarkMode ? '#090d16' : '#ffffff' }]}>BERECHNEN</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, borderWidth: 1 }]} onPress={clearInputs}>
-                  <Text style={[styles.actionButtonText, { color: theme.subTextColor }]}>RESET</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             {/* ERGEBNIS ANZEIGE */}
             <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: result ? theme.successColor : theme.borderColor }]}>
               <Text style={[styles.resultTitle, { color: result ? theme.successColor : theme.subTextColor }]}>
@@ -406,16 +407,16 @@ export default function App() {
               <Text style={[styles.cardLabel, { color: theme.primary }]}>APP ANLEITUNG & BEDIENUNG</Text>
               
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>1. Flugzeugtyp auswählen</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>1. STD und OFB eingeben</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Wähle ganz oben aus, ob es sich um eine B747 oder A340/600 (Faktor 6) oder um "Alle anderen" (Faktor 4) handelt. Die Berechnung passt sich beim Umschalten sofort an.
+                  Gib zuerst die Zeiten für STD und OFB im Format HH:MM ein. Bei Fehleingaben (z.B. Stunden > 23 oder Minuten > 59) wird das jeweilige Feld auf 00:00 zurückgesetzt und der Cursor springt an den Anfang, sodass du sofort weitertippen kannst.
                 </Text>
               </View>
 
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Start- und Endzeit eingeben</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Flugzeugtyp auswählen</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Gib die Zeiten im Format HH:MM ein. Bei Fehleingaben (z.B. Stunden > 23 oder Minuten > 59) wird das jeweilige Feld auf 00:00 zurückgesetzt und der Cursor springt an den Anfang, sodass du sofort weitertippen kannst.
+                  Wähle aus, ob es sich um eine B747 oder A340/600 (Faktor 6) oder um "Alle anderen" (Faktor 4) handelt. Die Berechnung passt sich sofort an.
                 </Text>
               </View>
 
@@ -429,7 +430,7 @@ export default function App() {
               <View style={styles.guideStep}>
                 <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>4. Berechnungslogik</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Ab einer Zeitdifferenz von mehr als 30 Minuten wird ab dem nächsten 15-Minuten-Raster (z. B. bei Start 10:00 ab Minute 46: 10:46, 11:01, 11:16, 11:31 usw.) gerechnet und mit dem jeweiligen Typen-Faktor multipliziert.
+                  Ab einer Zeitdifferenz von mehr als 30 Minuten wird ab dem nächsten 15-Minuten-Raster (z. B. bei STD 10:00 ab Minute 46: 10:46, 11:01, 11:16, 11:31 usw.) gerechnet und mit dem jeweiligen Typen-Faktor multipliziert.
                 </Text>
               </View>
             </View>
