@@ -15,7 +15,7 @@ export default function App() {
   const [endTime, setEndTime] = useState('');
   const [aircraftType, setAircraftType] = useState('B747_A340');
   
-  // States für den neuen E-Mail Rechner Tab
+  // States für den E-Mail Rechner Tab
   const [emailDateTime, setEmailDateTime] = useState('');
   const [orderDateTime, setOrderDateTime] = useState('');
   const [emailResult, setEmailResult] = useState(null);
@@ -61,7 +61,7 @@ export default function App() {
     return { formatted, isError: false };
   };
 
-  // Hilfsschema für die Eingabe von Datum & Zeit (DD.MM. HH:MM)
+  // Hilfsschema für die Eingabe von Datum & Zeit (TT.MM. HH:MM)
   const processAndValidateDateTimeInput = (text) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length === 0) return { formatted: '', isError: false };
@@ -84,7 +84,6 @@ export default function App() {
     return { formatted, isError: false };
   };
 
-  // Parsen von DD.MM. HH:MM zu Minuten im Jahr (vereinfacht für Differenz)
   const parseDateTimeToMinutes = (str) => {
     if (!str || str.length < 11) return null;
     const parts = str.split(/[\. :]/);
@@ -95,7 +94,6 @@ export default function App() {
     const minutes = parseInt(parts[3], 10);
 
     if (isNaN(day) || isNaN(month) || isNaN(hours) || isNaN(minutes)) return null;
-    // Approximierte Minutenberechnung über Tage und Monate
     const totalMins = (month * 30 + day) * 24 * 60 + hours * 60 + minutes;
     return totalMins;
   };
@@ -152,7 +150,6 @@ export default function App() {
     });
   };
 
-  // E-Mail Differenz Berechnung ausführen
   const calculateEmailDifference = (emailStr, orderStr) => {
     setEmailErrorMsg('');
     const emailMin = parseDateTimeToMinutes(emailStr);
@@ -313,11 +310,11 @@ export default function App() {
             </Text>
           </TouchableOpacity>
 
-          <Text style={[styles.title, { color: theme.titleColor }]}>Überstunden Rechner</Text>
+          <Text style={[styles.title, { color: theme.titleColor }]}>AeroTime Tools</Text>
           <View style={[styles.accentLine, { backgroundColor: theme.primary }]} />
         </View>
 
-        {/* TAB NAVIGATION (3 Tabs) */}
+        {/* TAB NAVIGATION */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[
@@ -334,7 +331,7 @@ export default function App() {
                 activeTab === 'calc' && { color: isDarkMode ? '#090d16' : '#ffffff', fontWeight: '900' }
               ]}
             >
-              ÜBERSTUNDENRECHNER
+              ÜBERSTUNDEN
             </Text>
           </TouchableOpacity>
 
@@ -383,7 +380,7 @@ export default function App() {
             
             {/* EINGABE ZEITEN */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HH:MM)</Text>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN</Text>
               
               {errorMsg ? <Text style={[styles.errorText, { color: theme.errorColor }]}>{errorMsg}</Text> : null}
 
@@ -451,7 +448,7 @@ export default function App() {
               </View>
             </View>
 
-            {/* FLUGZEUGTYP SELEKTOR */}
+            {/* FLUGZEUGTYP WÄHLEN */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
               <Text style={[styles.cardLabel, { color: theme.primary }]}>FLUGZEUGTYP WÄHLEN</Text>
               <View style={styles.typeContainer}>
@@ -495,7 +492,7 @@ export default function App() {
               </View>
             </View>
 
-            {/* ERGEBNIS ANZEIGE */}
+            {/* BERECHNUNGSERGEBNIS */}
             <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: result ? theme.successColor : theme.borderColor }]}>
               <Text style={[styles.resultTitle, { color: result ? theme.successColor : theme.subTextColor }]}>
                 BERECHNUNGSERGEBNIS
@@ -527,7 +524,7 @@ export default function App() {
           /* TAB 2: E-MAIL RECHNER */
           <View style={styles.calcViewWrapper}>
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITDIFFERENZ ERFASSEN (TT.MM. HH:MM)</Text>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITDIFFERENZ ANPASSEN</Text>
               
               {emailErrorMsg ? <Text style={[styles.errorText, { color: theme.errorColor }]}>{emailErrorMsg}</Text> : null}
 
@@ -539,7 +536,7 @@ export default function App() {
                     style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 16 }]}
                     value={emailDateTime}
                     onChangeText={handleEmailChange}
-                    placeholder="24.05. 08:00"
+                    placeholder="20.11 15:30"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
                     maxLength={11}
@@ -555,7 +552,7 @@ export default function App() {
                     style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 16 }]}
                     value={orderDateTime}
                     onChangeText={handleOrderChange}
-                    placeholder="24.05. 14:30"
+                    placeholder="21.11 10:50"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
                     maxLength={11}
@@ -575,7 +572,7 @@ export default function App() {
               </View>
             </View>
 
-            {/* ERGEBNIS FÜR E-MAIL RECHNER */}
+            {/* ERGEBNIS ZEITABSTAND */}
             <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: emailResult ? theme.successColor : theme.borderColor }]}>
               <Text style={[styles.resultTitle, { color: emailResult ? theme.successColor : theme.subTextColor }]}>
                 ERGEBNIS ZEITABSTAND
@@ -603,14 +600,14 @@ export default function App() {
               <View style={styles.guideStep}>
                 <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>1. Überstundenrechner verwenden</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Wechsle in den Tab "Überstundenrechner". Gib dort die Startzeit (STD) und Endzeit (OFB) im Format HH:MM ein. Das System korrigiert ungültige Zeiten (Stunden &gt; 23, Minuten &gt; 59) automatisch und setzt den Cursor bei Bedarf zurück. Wähle anschließend den Flugzeugtyp (B747/A340-600 oder Alle anderen), um die Überstunden in Industriezeit zu berechnen.
+                  Wechsle in den Tab "Überstunden". Gib unter "Zeitfenster eingeben" die Startzeit (STD) und Endzeit (OFB) im Format HH:MM ein. Das System korrigiert ungültige Zeiten automatisch. Unter "Flugzeugtyp wählen" bestimmst du den Faktor, und im Feld "Berechnungsergebnis" siehst du direkt die Industriezeit.
                 </Text>
               </View>
 
               <View style={styles.guideStep}>
                 <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. E-Mail Rechner verwenden</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Im Tab "E-Mail Rechner" kannst du das Datum und die Uhrzeit für die "Ankunft E-Mail" sowie die "Auftragszeit" eingeben (Format: TT.MM. HH:MM). Das Tool errechnet automatisch den zeitlichen Abstand bzw. die Differenz zwischen diesen beiden Zeitpunkten.
+                  Im Tab "E-Mail Rechner" kannst du unter "Zeitdifferenz anpassen" das Datum und die Uhrzeit für die "Ankunft E-Mail" sowie die "Auftragszeit" eingeben (Format: TT.MM. HH:MM). Das Tool errechnet unter "Ergebnis Zeitabstand" automatisch den zeitlichen Abstand zwischen diesen Zeitpunkten.
                 </Text>
               </View>
 
@@ -718,20 +715,21 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 4,
     marginBottom: 10,
   },
   tabButton: {
     flex: 1,
     borderWidth: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   tabButtonText: {
     fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
     textAlign: 'center',
   },
   calcViewWrapper: {
@@ -752,6 +750,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
     marginBottom: 8,
+    textAlign: 'center', // Hier zentriert
   },
   errorText: {
     fontSize: 10,
@@ -769,10 +768,12 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   typeButtonText: {
     fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
   },
   inputRow: {
     flexDirection: 'row',
@@ -814,6 +815,7 @@ const styles = StyleSheet.create({
   separatorText: {
     fontSize: 18,
     fontWeight: '900',
+    textAlign: 'center',
   },
   actionRow: {
     flexDirection: 'row',
@@ -824,6 +826,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   actionButtonText: {
     fontWeight: '900',
@@ -840,6 +843,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.2,
     marginBottom: 8,
+    textAlign: 'center', // Hier zentriert
   },
   singleResultBox: {
     marginBottom: 8,
@@ -853,30 +857,36 @@ const styles = StyleSheet.create({
   resultBoxValue: {
     fontSize: 16,
     fontWeight: '800',
+    textAlign: 'center',
   },
   resultBoxLabel: {
     fontSize: 9,
     marginTop: 2,
     fontWeight: '700',
+    textAlign: 'center',
   },
   resultHighlight: {
     borderWidth: 1,
     borderRadius: 8,
     padding: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   resultHighlightLabel: {
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
+    textAlign: 'center',
   },
   resultHighlightValue: {
     fontSize: 28,
     fontWeight: '900',
     marginVertical: 2,
+    textAlign: 'center',
   },
   resultHighlightSub: {
     fontSize: 10,
+    textAlign: 'center',
   },
   guideStep: {
     marginBottom: 14,
@@ -898,6 +908,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.1,
     marginBottom: 6,
+    textAlign: 'center',
   },
   devRow: {
     flexDirection: 'row',
