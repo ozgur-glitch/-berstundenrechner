@@ -14,6 +14,13 @@ export default function App() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [aircraftType, setAircraftType] = useState('B747_A340');
+  
+  // States für den neuen E-Mail Rechner Tab
+  const [emailDateTime, setEmailDateTime] = useState('');
+  const [orderDateTime, setOrderDateTime] = useState('');
+  const [emailResult, setEmailResult] = useState(null);
+  const [emailErrorMsg, setEmailErrorMsg] = useState('');
+
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -21,8 +28,10 @@ export default function App() {
 
   const startTimeInputRef = useRef(null);
   const endTimeInputRef = useRef(null);
+  const emailInputRef = useRef(null);
+  const orderInputRef = useRef(null);
 
-  // Strikte Validierung mit Zurücksetzung auf 00:00 bei Überschreitung
+  // Strikte Validierung für Uhrzeiten (HH:MM)
   const processAndValidateTimeInput = (text) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length === 0) return { formatted: '', isError: false };
@@ -30,7 +39,6 @@ export default function App() {
     let hours = cleaned.substring(0, 2);
     let minutes = cleaned.substring(2, 4);
 
-    // Prüfung der Stunden (> 23 -> Fehler -> Nullstellung)
     if (hours.length === 2) {
       const hNum = parseInt(hours, 10);
       if (hNum > 23) {
@@ -38,7 +46,6 @@ export default function App() {
       }
     }
 
-    // Prüfung der Minuten (> 59 -> Fehler -> Nullstellung)
     if (minutes.length === 2) {
       const mNum = parseInt(minutes, 10);
       if (mNum > 59) {
@@ -52,6 +59,45 @@ export default function App() {
     }
 
     return { formatted, isError: false };
+  };
+
+  // Hilfsschema für die Eingabe von Datum & Zeit (DD.MM. HH:MM)
+  const processAndValidateDateTimeInput = (text) => {
+    const cleaned = text.replace(/[^0-9]/g, '');
+    if (cleaned.length === 0) return { formatted: '', isError: false };
+
+    let day = cleaned.substring(0, 2);
+    let month = cleaned.substring(2, 4);
+    let hours = cleaned.substring(4, 6);
+    let minutes = cleaned.substring(6, 8);
+
+    if (day.length === 2 && parseInt(day, 10) > 31) day = '31';
+    if (month.length === 2 && parseInt(month, 10) > 12) month = '12';
+    if (hours.length === 2 && parseInt(hours, 10) > 23) hours = '23';
+    if (minutes.length === 2 && parseInt(minutes, 10) > 59) minutes = '59';
+
+    let formatted = day;
+    if (cleaned.length > 2) formatted = `${day}.${month}`;
+    if (cleaned.length > 4) formatted = `${day}.${month} ${hours}`;
+    if (cleaned.length > 6) formatted = `${day}.${month} ${hours}:${minutes}`;
+
+    return { formatted, isError: false };
+  };
+
+  // Parsen von DD.MM. HH:MM zu Minuten im Jahr (vereinfacht für Differenz)
+  const parseDateTimeToMinutes = (str) => {
+    if (!str || str.length < 11) return null;
+    const parts = str.split(/[\. :]/);
+    if (parts.length < 4) return null;
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const hours = parseInt(parts[2], 10);
+    const minutes = parseInt(parts[3], 10);
+
+    if (isNaN(day) || isNaN(month) || isNaN(hours) || isNaN(minutes)) return null;
+    // Approximierte Minutenberechnung über Tage und Monate
+    const totalMins = (month * 30 + day) * 24 * 60 + hours * 60 + minutes;
+    return totalMins;
   };
 
   const parseTimeToMinutes = (hhmmStr) => {
@@ -103,6 +149,32 @@ export default function App() {
       multiplier,
       formattedResultTime: formatMinutesToIndustrialTime(calculatedFactorMinutes),
       intervalCount
+    });
+  };
+
+  // E-Mail Differenz Berechnung ausführen
+  const calculateEmailDifference = (emailStr, orderStr) => {
+    setEmailErrorMsg('');
+    const emailMin = parseDateTimeToMinutes(emailStr);
+    const orderMin = parseDateTimeToMinutes(orderStr);
+
+    if (emailMin === null || orderMin === null) {
+      setEmailResult(null);
+      return;
+    }
+
+    let diffMin = orderMin - emailMin;
+    if (diffMin < 0) {
+      setEmailErrorMsg('Hinweis: Auftragszeit liegt vor der E-Mail-Ankunft.');
+    }
+
+    const absDiff = Math.abs(diffMin);
+    const diffHours = Math.floor(absDiff / 60);
+    const diffMins = absDiff % 60;
+
+    setEmailResult({
+      totalMinutes: diffMin,
+      formattedDiff: `${diffMin < 0 ? '-' : ''}${diffHours} Std. ${diffMins} Min.`
     });
   };
 
@@ -177,8 +249,33 @@ export default function App() {
     }
   };
 
-  const calculateOvertime = () => {
-    calculateOvertimeWithParams(startTime, endTime, aircraftType);
+  const handleEmailChange = (text) => {
+    const { formatted } = processAndValidateDateTimeInput(text);
+    setEmailDateTime(formatted);
+
+    const rawCleaned = text.replace(/[^0-9]/g, '');
+    if (rawCleaned.length === 8) {
+      setTimeout(() => {
+        orderInputRef.current?.focus();
+      }, 50);
+    }
+
+    if (formatted.length === 11 && orderDateTime.length === 11) {
+      calculateEmailDifference(formatted, orderDateTime);
+    } else {
+      setEmailResult(null);
+    }
+  };
+
+  const handleOrderChange = (text) => {
+    const { formatted } = processAndValidateDateTimeInput(text);
+    setOrderDateTime(formatted);
+
+    if (emailDateTime.length === 11 && formatted.length === 11) {
+      calculateEmailDifference(emailDateTime, formatted);
+    } else {
+      setEmailResult(null);
+    }
   };
 
   const clearInputs = () => {
@@ -186,6 +283,13 @@ export default function App() {
     setEndTime('');
     setResult(null);
     setErrorMsg('');
+  };
+
+  const clearEmailInputs = () => {
+    setEmailDateTime('');
+    setOrderDateTime('');
+    setEmailResult(null);
+    setEmailErrorMsg('');
   };
 
   const theme = isDarkMode ? darkTheme : lightTheme;
@@ -213,7 +317,7 @@ export default function App() {
           <View style={[styles.accentLine, { backgroundColor: theme.primary }]} />
         </View>
 
-        {/* TAB NAVIGATION */}
+        {/* TAB NAVIGATION (3 Tabs) */}
         <View style={styles.tabContainer}>
           <TouchableOpacity
             style={[
@@ -230,7 +334,26 @@ export default function App() {
                 activeTab === 'calc' && { color: isDarkMode ? '#090d16' : '#ffffff', fontWeight: '900' }
               ]}
             >
-              RECHNER
+              ÜBERSTUNDENRECHNER
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.tabButton,
+              { backgroundColor: theme.cardBg, borderColor: theme.borderColor },
+              activeTab === 'emailCalc' && { backgroundColor: theme.primary, borderColor: theme.primary }
+            ]}
+            onPress={() => setActiveTab('emailCalc')}
+          >
+            <Text
+              style={[
+                styles.tabButtonText,
+                { color: theme.textColor },
+                activeTab === 'emailCalc' && { color: isDarkMode ? '#090d16' : '#ffffff', fontWeight: '900' }
+              ]}
+            >
+              E-MAIL RECHNER
             </Text>
           </TouchableOpacity>
 
@@ -254,11 +377,11 @@ export default function App() {
           </TouchableOpacity>
         </View>
 
-        {/* TAB 1: RECHNER */}
+        {/* TAB 1: ÜBERSTUNDENRECHNER */}
         {activeTab === 'calc' ? (
           <View style={styles.calcViewWrapper}>
             
-            {/* EINGABE ZEITEN (Jetzt ganz oben) */}
+            {/* EINGABE ZEITEN */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
               <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITFENSTER EINGEBEN (HH:MM)</Text>
               
@@ -312,14 +435,14 @@ export default function App() {
                     keyboardType="numeric"
                     maxLength={5}
                     returnKeyType="done"
-                    onSubmitEditing={calculateOvertime}
+                    onSubmitEditing={() => calculateOvertimeWithParams(startTime, endTime, aircraftType)}
                   />
                 </View>
 
               </View>
 
               <View style={styles.actionRow}>
-                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.primary }]} onPress={calculateOvertime}>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.primary }]} onPress={() => calculateOvertimeWithParams(startTime, endTime, aircraftType)}>
                   <Text style={[styles.actionButtonText, { color: isDarkMode ? '#090d16' : '#ffffff' }]}>BERECHNEN</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, borderWidth: 1 }]} onPress={clearInputs}>
@@ -328,7 +451,7 @@ export default function App() {
               </View>
             </View>
 
-            {/* FLUGZEUGTYP SELEKTOR (Jetzt darunter) */}
+            {/* FLUGZEUGTYP SELEKTOR */}
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
               <Text style={[styles.cardLabel, { color: theme.primary }]}>FLUGZEUGTYP WÄHLEN</Text>
               <View style={styles.typeContainer}>
@@ -400,37 +523,101 @@ export default function App() {
               </View>
             </View>
           </View>
+        ) : activeTab === 'emailCalc' ? (
+          /* TAB 2: E-MAIL RECHNER */
+          <View style={styles.calcViewWrapper}>
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>ZEITDIFFERENZ ERFASSEN (TT.MM. HH:MM)</Text>
+              
+              {emailErrorMsg ? <Text style={[styles.errorText, { color: theme.errorColor }]}>{emailErrorMsg}</Text> : null}
+
+              <View style={styles.emailInputSection}>
+                <View style={styles.emailInputWrapper}>
+                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>ANKUNFT E-MAIL</Text>
+                  <TextInput
+                    ref={emailInputRef}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 16 }]}
+                    value={emailDateTime}
+                    onChangeText={handleEmailChange}
+                    placeholder="24.05. 08:00"
+                    placeholderTextColor={theme.placeholderColor}
+                    keyboardType="numeric"
+                    maxLength={11}
+                    returnKeyType="next"
+                    onSubmitEditing={() => orderInputRef.current?.focus()}
+                  />
+                </View>
+
+                <View style={styles.emailInputWrapper}>
+                  <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>AUFTRAGSZEIT</Text>
+                  <TextInput
+                    ref={orderInputRef}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 16 }]}
+                    value={orderDateTime}
+                    onChangeText={handleOrderChange}
+                    placeholder="24.05. 14:30"
+                    placeholderTextColor={theme.placeholderColor}
+                    keyboardType="numeric"
+                    maxLength={11}
+                    returnKeyType="done"
+                    onSubmitEditing={() => calculateEmailDifference(emailDateTime, orderDateTime)}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.primary }]} onPress={() => calculateEmailDifference(emailDateTime, orderDateTime)}>
+                  <Text style={[styles.actionButtonText, { color: isDarkMode ? '#090d16' : '#ffffff' }]}>DIFFERENZ BERECHNEN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, borderWidth: 1 }]} onPress={clearEmailInputs}>
+                  <Text style={[styles.actionButtonText, { color: theme.subTextColor }]}>RESET</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* ERGEBNIS FÜR E-MAIL RECHNER */}
+            <View style={[styles.card, styles.resultCard, { backgroundColor: theme.resultBg, borderColor: emailResult ? theme.successColor : theme.borderColor }]}>
+              <Text style={[styles.resultTitle, { color: emailResult ? theme.successColor : theme.subTextColor }]}>
+                ERGEBNIS ZEITABSTAND
+              </Text>
+
+              <View style={[styles.resultHighlight, { backgroundColor: theme.highlightBg, borderColor: emailResult ? theme.successColor : theme.borderColor }]}>
+                <Text style={[styles.resultHighlightLabel, { color: emailResult ? theme.successColor : theme.subTextColor }]}>
+                  DIFFERENZ ZWISCHEN ANKUNFT & AUFTRAG
+                </Text>
+                <Text style={[styles.resultHighlightValue, { color: emailResult ? theme.successColor : theme.subTextColor, fontSize: 24 }]}>
+                  {emailResult ? emailResult.formattedDiff : '0 Std. 0 Min.'}
+                </Text>
+                <Text style={[styles.resultHighlightSub, { color: theme.subTextColor }]}>
+                  {emailResult ? `Gesamt: ${emailResult.totalMinutes} Minuten` : 'Bitte Datum & Uhrzeit eingeben'}
+                </Text>
+              </View>
+            </View>
+          </View>
         ) : (
-          /* TAB 2: ANLEITUNG & ENTWICKLERINFO */
+          /* TAB 3: ANLEITUNG & ENTWICKLERINFO */
           <ScrollView contentContainerStyle={styles.guideScrollContainer} keyboardShouldPersistTaps="handled">
             <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-              <Text style={[styles.cardLabel, { color: theme.primary }]}>APP ANLEITUNG & BEDIENUNG</Text>
+              <Text style={[styles.cardLabel, { color: theme.primary }]}>HANDBUCH & BEDIENUNG</Text>
               
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>1. STD und OFB eingeben</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>1. Überstundenrechner verwenden</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Gib zuerst die Zeiten für STD und OFB im Format HH:MM ein. Bei Fehleingaben (z.B. Stunden > 23 oder Minuten > 59) wird das jeweilige Feld auf 00:00 zurückgesetzt und der Cursor springt an den Anfang, sodass du sofort weitertippen kannst.
+                  Wechsle in den Tab "Überstundenrechner". Gib dort die Startzeit (STD) und Endzeit (OFB) im Format HH:MM ein. Das System korrigiert ungültige Zeiten (Stunden &gt; 23, Minuten &gt; 59) automatisch und setzt den Cursor bei Bedarf zurück. Wähle anschließend den Flugzeugtyp (B747/A340-600 oder Alle anderen), um die Überstunden in Industriezeit zu berechnen.
                 </Text>
               </View>
 
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. Flugzeugtyp auswählen</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. E-Mail Rechner verwenden</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Wähle aus, ob es sich um eine B747 oder A340/600 (Faktor 6) oder um "Alle anderen" (Faktor 4) handelt. Die Berechnung passt sich sofort an.
+                  Im Tab "E-Mail Rechner" kannst du das Datum und die Uhrzeit für die "Ankunft E-Mail" sowie die "Auftragszeit" eingeben (Format: TT.MM. HH:MM). Das Tool errechnet automatisch den zeitlichen Abstand bzw. die Differenz zwischen diesen beiden Zeitpunkten.
                 </Text>
               </View>
 
               <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>3. Berechnen</Text>
+                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>3. Allgemeine Berechnungslogik</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Mit Betätigen von "OK" / "Enter" auf der Tastatur oder dem "BERECHNEN"-Button wird das Ergebnis in Industriezeit (z. B. 1,75) ermittelt.
-                </Text>
-              </View>
-
-              <View style={styles.guideStep}>
-                <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>4. Berechnungslogik</Text>
-                <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Ab einer Zeitdifferenz von mehr als 30 Minuten wird ab dem nächsten 15-Minuten-Raster (z. B. bei STD 10:00 ab Minute 46: 10:46, 11:01, 11:16, 11:31 usw.) gerechnet und mit dem jeweiligen Typen-Faktor multipliziert.
+                  Im Überstundenrechner wird ab einer Zeitdifferenz von mehr als 30 Minuten im 15-Minuten-Raster weitergezählt und mit dem flottenabhängigen Faktor multipliziert.
                 </Text>
               </View>
             </View>
@@ -531,20 +718,21 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     marginBottom: 10,
   },
   tabButton: {
     flex: 1,
     borderWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 8,
     alignItems: 'center',
   },
   tabButtonText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 1.1,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   calcViewWrapper: {
     flex: 1,
@@ -592,6 +780,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
+  emailInputSection: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  emailInputWrapper: {
+    flex: 1,
+  },
   inputWrapper: {
     flex: 1,
   },
@@ -631,8 +827,9 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 1.1,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textAlign: 'center',
   },
   resultCard: {
     borderWidth: 1.5,
