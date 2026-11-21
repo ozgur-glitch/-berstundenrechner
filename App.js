@@ -61,7 +61,7 @@ export default function App() {
     return { formatted, isError: false };
   };
 
-  // Hilfsschema für die Eingabe von Datum & Zeit (TT.MM. HH:MM)
+  // Hilfsschema für die Eingabe von Datum & Zeit mit Punkt nach dem Monat (TT.MM. HH:MM)
   const processAndValidateDateTimeInput = (text) => {
     const cleaned = text.replace(/[^0-9]/g, '');
     if (cleaned.length === 0) return { formatted: '', isError: false };
@@ -77,15 +77,15 @@ export default function App() {
     if (minutes.length === 2 && parseInt(minutes, 10) > 59) minutes = '59';
 
     let formatted = day;
-    if (cleaned.length > 2) formatted = `${day}.${month}`;
-    if (cleaned.length > 4) formatted = `${day}.${month} ${hours}`;
-    if (cleaned.length > 6) formatted = `${day}.${month} ${hours}:${minutes}`;
+    if (cleaned.length > 2) formatted = `${day}.${month}.`;
+    if (cleaned.length > 4) formatted = `${day}.${month}. ${hours}`;
+    if (cleaned.length > 6) formatted = `${day}.${month}. ${hours}:${minutes}`;
 
     return { formatted, isError: false };
   };
 
   const parseDateTimeToMinutes = (str) => {
-    if (!str || str.length < 11) return null;
+    if (!str || str.length < 12) return null;
     const parts = str.split(/[\. :]/);
     if (parts.length < 4) return null;
     const day = parseInt(parts[0], 10);
@@ -257,7 +257,7 @@ export default function App() {
       }, 50);
     }
 
-    if (formatted.length === 11 && orderDateTime.length === 11) {
+    if (formatted.length === 12 && orderDateTime.length === 12) {
       calculateEmailDifference(formatted, orderDateTime);
     } else {
       setEmailResult(null);
@@ -268,7 +268,7 @@ export default function App() {
     const { formatted } = processAndValidateDateTimeInput(text);
     setOrderDateTime(formatted);
 
-    if (emailDateTime.length === 11 && formatted.length === 11) {
+    if (emailDateTime.length === 12 && formatted.length === 12) {
       calculateEmailDifference(emailDateTime, formatted);
     } else {
       setEmailResult(null);
@@ -533,13 +533,13 @@ export default function App() {
                   <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>ANKUNFT E-MAIL</Text>
                   <TextInput
                     ref={emailInputRef}
-                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 16 }]}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 15, letterSpacing: 1 }]}
                     value={emailDateTime}
                     onChangeText={handleEmailChange}
-                    placeholder="20.11 15:30"
+                    placeholder="20.11. 15:30"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
-                    maxLength={11}
+                    maxLength={12}
                     returnKeyType="next"
                     onSubmitEditing={() => orderInputRef.current?.focus()}
                   />
@@ -549,13 +549,13 @@ export default function App() {
                   <Text style={[styles.inputSubLabel, { color: theme.subTextColor }]}>AUFTRAGSZEIT</Text>
                   <TextInput
                     ref={orderInputRef}
-                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 16 }]}
+                    style={[styles.timeInput, { backgroundColor: theme.inputBg, borderColor: theme.borderColor, color: theme.textColor, fontSize: 15, letterSpacing: 1 }]}
                     value={orderDateTime}
                     onChangeText={handleOrderChange}
-                    placeholder="21.11 10:50"
+                    placeholder="21.11. 10:50"
                     placeholderTextColor={theme.placeholderColor}
                     keyboardType="numeric"
-                    maxLength={11}
+                    maxLength={12}
                     returnKeyType="done"
                     onSubmitEditing={() => calculateEmailDifference(emailDateTime, orderDateTime)}
                   />
@@ -607,7 +607,7 @@ export default function App() {
               <View style={styles.guideStep}>
                 <Text style={[styles.guideStepTitle, { color: theme.textColor }]}>2. E-Mail Rechner verwenden</Text>
                 <Text style={[styles.guideStepDesc, { color: theme.subTextColor }]}>
-                  Im Tab "E-Mail Rechner" kannst du unter "Zeitdifferenz anpassen" das Datum und die Uhrzeit für die "Ankunft E-Mail" sowie die "Auftragszeit" eingeben (Format: TT.MM. HH:MM). Das Tool errechnet unter "Ergebnis Zeitabstand" automatisch den zeitlichen Abstand zwischen diesen Zeitpunkten.
+                  Im Tab "E-Mail Rechner" kannst du unter "Zeitdifferenz anpassen" das Datum (mit automatischem Punkt nach dem Monat, z.B. 20.11.) und die Uhrzeit für die "Ankunft E-Mail" sowie die "Auftragszeit" eingeben (Format: TT.MM. HH:MM). Das Tool errechnet unter "Ergebnis Zeitabstand" automatisch den zeitlichen Abstand zwischen diesen Zeitpunkten.
                 </Text>
               </View>
 
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
     marginBottom: 8,
-    textAlign: 'center', // Hier zentriert
+    textAlign: 'center',
   },
   errorText: {
     fontSize: 10,
@@ -843,7 +843,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.2,
     marginBottom: 8,
-    textAlign: 'center', // Hier zentriert
+    textAlign: 'center',
   },
   singleResultBox: {
     marginBottom: 8,
