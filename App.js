@@ -84,14 +84,16 @@ export default function App() {
     return { formatted, isError: false };
   };
 
+  // Sauberes Parsen von "TT.MM. HH:MM"
   const parseDateTimeToMinutes = (str) => {
     if (!str || str.length < 12) return null;
-    const parts = str.split(/[\. :]/);
-    if (parts.length < 4) return null;
-    const day = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10);
-    const hours = parseInt(parts[2], 10);
-    const minutes = parseInt(parts[3], 10);
+    const cleanedStr = str.replace(/[^0-9]/g, '');
+    if (cleanedStr.length < 8) return null;
+
+    const day = parseInt(cleanedStr.substring(0, 2), 10);
+    const month = parseInt(cleanedStr.substring(2, 4), 10);
+    const hours = parseInt(cleanedStr.substring(4, 6), 10);
+    const minutes = parseInt(cleanedStr.substring(6, 8), 10);
 
     if (isNaN(day) || isNaN(month) || isNaN(hours) || isNaN(minutes)) return null;
     const totalMins = (month * 30 + day) * 24 * 60 + hours * 60 + minutes;
